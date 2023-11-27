@@ -121,9 +121,7 @@ def username_exists_patient(username):
         cursor.execute(select_username, username)
         #  returns false if the cursor is not before the first record or if there are no rows in the ResultSet.
         for row in cursor:
-            if row['Username'] is not None:
-                print("Username taken, try again!")
-                return True
+            return row['Username'] is not None
     except pymssql.Error as e:
         print("Failed to create user.")
         print("Error occurred when checking username")
@@ -300,9 +298,9 @@ def reserve(tokens):
             appointment = Appointments(time=d, status=0,
                                        pname=current_patient.get_username(), cname=chosen_cname, vname=vaccine_name)
             appointment.save_to_db()
+            vaccine.decrease_available_doses(1)
             print(
                 f"Appointment ID: {appointment.get_id()}, Caregiver username: {chosen_cname}")
-            vaccine.decrease_available_doses(1)
 
     except pymssql.Error as e:
         print("Please try again!")
