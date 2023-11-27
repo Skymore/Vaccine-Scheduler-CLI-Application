@@ -46,7 +46,7 @@ def create_patient(tokens):
     except pymssql.Error as e:
         print("Failed to create user.")
         print("Db-Error:", e)
-        # quit()
+        return
     except Exception as e:
         print("Failed to create user.")
         print(e)
@@ -81,7 +81,7 @@ def create_caregiver(tokens):
     except pymssql.Error as e:
         print("Failed to create user.")
         print("Db-Error:", e)
-        # quit()
+        return
     except Exception as e:
         print("Failed to create user.")
         print(e)
@@ -103,7 +103,6 @@ def username_exists_caregiver(username):
     except pymssql.Error as e:
         print("Error occurred when checking username")
         print("Db-Error:", e)
-        # quit()
     except Exception as e:
         print("Error occurred when checking username")
         print("Error:", e)
@@ -129,7 +128,6 @@ def username_exists_patient(username):
         print("Failed to create user.")
         print("Error occurred when checking username")
         print("Db-Error:", e)
-        # quit()
     except Exception as e:
         print("Failed to create user.")
         print("Error occurred when checking username")
@@ -162,7 +160,7 @@ def login_patient(tokens):
     except pymssql.Error as e:
         print("Login failed.")
         print("Db-Error:", e)
-        # quit()
+        return
     except Exception as e:
         print("Login failed.")
         print("Error:", e)
@@ -199,7 +197,7 @@ def login_caregiver(tokens):
     except pymssql.Error as e:
         print("Login failed.")
         print("Db-Error:", e)
-        # quit()
+        return
     except Exception as e:
         print("Login failed.")
         print("Error:", e)
@@ -257,16 +255,13 @@ def search_caregiver_schedule(tokens):
         print("Please try again!")
         print("Search Caregiver Schedule Failed")
         print("Db-Error:", e)
-        # quit()
     except ValueError:
         print("Please try again!")
-        print("Please enter a valid date!")
-        # return
+        print("Please enter a valid date! Use format mm-dd-yyyy.")
     except Exception as e:
         print("Please try again!")
         print("Error occurred when search caregiver schedule")
         print("Error:", e)
-        # return
 
 
 def reserve(tokens):
@@ -300,24 +295,23 @@ def reserve(tokens):
         elif len(available_caregivers) == 0:
             print("No Caregiver is available!")
         else:
-            chosen_caregiver_username = available_caregivers[0][0]
-            Caregiver.delete_availability(d, chosen_caregiver_username)
+            chosen_cname = available_caregivers[0][0]
+            Caregiver.delete_availability(d, chosen_cname)
             appointment = Appointments(time=d, status=0,
-                                       pname=current_patient.get_username(), cname=chosen_caregiver_username, vname=vaccine_name)
+                                       pname=current_patient.get_username(), cname=chosen_cname, vname=vaccine_name)
             appointment.save_to_db()
             print(
-                f"Appointment ID: {appointment.get_id()}, Caregiver username: {chosen_caregiver_username}")
+                f"Appointment ID: {appointment.get_id()}, Caregiver username: {chosen_cname}")
+            vaccine.decrease_available_doses(1)
 
     except pymssql.Error as e:
         print("Please try again!")
         print("Error occurred when reserving")
         print("Db-Error:", e)
-        # quit()
     except Exception as e:
         print("Please try again!")
         print("Error occurred when reserving")
         print("Error:", e)
-        return
 
 
 def upload_availability(tokens):
@@ -338,26 +332,64 @@ def upload_availability(tokens):
     try:
         # assume input is hyphenated in the format mm-dd-yyyy
         d = datetime.datetime.strptime(date, "%m-%d-%Y")
-        current_caregiver.upload_availability(d)
+        cname = current_caregiver.get_username()
+        Caregiver.upload_availability(d, cname)
         print("Availability uploaded!")
     except pymssql.Error as e:
         print("Upload Availability Failed")
         print("Db-Error:", e)
-        # quit()
     except ValueError:
         print("Please enter a valid date! Use format mm-dd-yyyy.")
-        return
     except Exception as e:
         print("Error occurred when uploading availability")
         print("Error:", e)
-        return
 
 
 def cancel(tokens):
-    """
-    TODO: Extra Credit
-    """
-    pass
+    # cancel <appointment_id>
+    # check 1: if there is a user logged-in
+    global current_caregiver, current_patient
+    if current_caregiver is None and current_patient is None:
+        print("Please login first.")
+        return
+
+    # check 2: the length for tokens need to be exactly 2 to include all information (with the operation name)
+    if len(tokens) != 2:
+        print("Please try again! Invalid input.")
+        return
+    try:
+        aid = tokens[1]
+        current_appointment = Appointments(ID=aid).get()
+    except pymssql.Error as e:
+        print("Please try again!")
+        print("Error occurred when canceling appointment")
+        print("Db-Error:", e)
+    except Exception as e:
+        print("Please try again!")
+        print("Error occurred when canceling appointment")
+        print("Error:", e)
+
+    if current_appointment is None:
+        print("Please try again!")
+        print(f"Appointment with ID {aid} doesn't exist!")
+    else:
+        try:
+            current_appointment.cancel_appointment()
+            cname = current_appointment.get_cname()
+            cancel_date = current_appointment.get_time()
+            Caregiver.upload_availability(cancel_date, cname)
+            vaccine_name = current_appointment.get_vname()
+            vaccine = Vaccine(vaccine_name).get()
+            vaccine.increase_available_doses(1)
+
+        except pymssql.Error as e:
+            print("Please try again!")
+            print("Error occurred when uploading availability")
+            print("Db-Error:", e)
+        except Exception as e:
+            print("Please try again!")
+            print("Error occurred when uploading availability")
+            print("Error:", e)
 
 
 def add_doses(tokens):
@@ -381,7 +413,7 @@ def add_doses(tokens):
     except pymssql.Error as e:
         print("Error occurred when adding doses")
         print("Db-Error:", e)
-        # quit()
+        return
     except Exception as e:
         print("Error occurred when adding doses")
         print("Error:", e)
@@ -396,7 +428,7 @@ def add_doses(tokens):
         except pymssql.Error as e:
             print("Error occurred when adding doses")
             print("Db-Error:", e)
-            # quit()
+            return
         except Exception as e:
             print("Error occurred when adding doses")
             print("Error:", e)
@@ -408,7 +440,7 @@ def add_doses(tokens):
         except pymssql.Error as e:
             print("Error occurred when adding doses")
             print("Db-Error:", e)
-            # quit()
+            return
         except Exception as e:
             print("Error occurred when adding doses")
             print("Error:", e)
@@ -417,10 +449,17 @@ def add_doses(tokens):
 
 
 def show_appointments(tokens):
-    '''
-    TODO: Part 2
-    '''
-    pass
+    # check 1: if there is a user logged-in
+    global current_caregiver, current_patient
+    if current_caregiver is None and current_patient is None:
+        print("Please login first.")
+        return
+    if current_caregiver is not None:
+        Appointments.show_caregiver_appointments(
+            current_caregiver.get_username())
+    else:  # current_patient is not None:
+        Appointments.show_patient_appointments(
+            current_patient.get_username())
 
 
 def logout(tokens):
@@ -457,28 +496,7 @@ def display_command_list():
 
 def start():
     stop = False
-    """
-    print()
-    print(" *** Please enter one of the following commands *** ")
-    # //TODO: implement create_patient (Part 1)
-    print("> create_patient <username> <password>")
-    print("> create_caregiver <username> <password>")
-    # // TODO: implement login_patient (Part 1)
-    print("> login_patient <username> <password>")
-    print("> login_caregiver <username> <password>")
-    # // TODO: implement search_caregiver_schedule (Part 2)
-    print("> search_caregiver_schedule <date>")
-    print("> reserve <date> <vaccine>")  # // TODO: implement reserve (Part 2)
-    print("> upload_availability <date>")
-    # // TODO: implement cancel (extra credit)
-    print("> cancel <appointment_id>")
-    print("> add_doses <vaccine> <number>")
-    # // TODO: implement show_appointments (Part 2)
-    print("> show_appointments")
-    print("> logout")  # // TODO: implement logout (Part 2)
-    print("> Quit")
-    print()
-    """
+
     while not stop:
         display_command_list()
         response = ""
@@ -510,7 +528,7 @@ def start():
             reserve(tokens)
         elif operation == "upload_availability":
             upload_availability(tokens)
-        elif operation == cancel:
+        elif operation == "cancel":
             cancel(tokens)
         elif operation == "add_doses":
             add_doses(tokens)

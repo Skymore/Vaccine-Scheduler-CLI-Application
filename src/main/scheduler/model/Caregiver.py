@@ -70,17 +70,24 @@ class Caregiver:
         finally:
             cm.close_connection()
 
-    # Insert availability with parameter date d
-    def upload_availability(self, d):
+    # Insert availability with parameter date d and caregiver username cname
+    @classmethod
+    def upload_availability(cls, d, cname):
         cm = ConnectionManager()
         conn = cm.create_connection()
         cursor = conn.cursor()
-
-        add_availability = "INSERT INTO Availabilities VALUES (%s , %s, 0)"
+        # check if this availability already exist
+        query = "SELECT Status FROM Availabilities WHERE Time = %s And username = %s"
         try:
-            cursor.execute(add_availability, (d, self.username))
-            # you must call commit() to persist your data if you don't set autocommit to True
-            conn.commit()
+            cursor.execute(query, (d, cname))
+            if cursor.rowcount != 0:
+                update = "UPDATE Availabilities SET Status = 0 WHERE Time = %s AND username = %s"
+                cursor.execute(update, (d, cname))
+                conn.commit()
+            else:
+                add_availability = "INSERT INTO Availabilities VALUES (%s , %s, 0)"
+                cursor.execute(add_availability, (d, cname))
+                conn.commit()
         except pymssql.Error:
             # print("Error occurred when updating caregiver availability")
             raise
@@ -88,13 +95,13 @@ class Caregiver:
             cm.close_connection()
 
     @classmethod
-    def delete_availability(cls, d, username):
+    def delete_availability(cls, d, cname):
         cm = ConnectionManager()
         conn = cm.create_connection()
         cursor = conn.cursor()
         del_availability = "UPDATE Availabilities SET Status = 1 WHERE Time = %s AND Username = %s"
         try:
-            cursor.execute(del_availability, (d, username))
+            cursor.execute(del_availability, (d, cname))
             # you must call commit() to persist your data if you don't set autocommit to True
             conn.commit()
         except pymssql.Error:
