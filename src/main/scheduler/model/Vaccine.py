@@ -1,11 +1,11 @@
+import pymssql
+from db.ConnectionManager import ConnectionManager
 import sys
 sys.path.append("../db/*")
-from db.ConnectionManager import ConnectionManager
-import pymssql
 
 
 class Vaccine:
-    def __init__(self, vaccine_name, available_doses):
+    def __init__(self, vaccine_name, available_doses=None):
         self.vaccine_name = vaccine_name
         self.available_doses = available_doses
 
@@ -42,9 +42,10 @@ class Vaccine:
         conn = cm.create_connection()
         cursor = conn.cursor()
 
-        add_doses = "INSERT INTO VACCINES VALUES (%s, %d)"
+        add_doses = "INSERT INTO Vaccines VALUES (%s, %d)"
         try:
-            cursor.execute(add_doses, (self.vaccine_name, self.available_doses))
+            cursor.execute(
+                add_doses, (self.vaccine_name, self.available_doses))
             # you must call commit() to persist your data if you don't set autocommit to True
             conn.commit()
         except pymssql.Error:
@@ -65,7 +66,8 @@ class Vaccine:
 
         update_vaccine_availability = "UPDATE vaccines SET Doses = %d WHERE name = %s"
         try:
-            cursor.execute(update_vaccine_availability, (self.available_doses, self.vaccine_name))
+            cursor.execute(update_vaccine_availability,
+                           (self.available_doses, self.vaccine_name))
             # you must call commit() to persist your data if you don't set autocommit to True
             conn.commit()
         except pymssql.Error:
@@ -86,7 +88,8 @@ class Vaccine:
 
         update_vaccine_availability = "UPDATE vaccines SET Doses = %d WHERE name = %s"
         try:
-            cursor.execute(update_vaccine_availability, (self.available_doses, self.vaccine_name))
+            cursor.execute(update_vaccine_availability,
+                           (self.available_doses, self.vaccine_name))
             # you must call commit() to persist your data if you don't set autocommit to True
             conn.commit()
         except pymssql.Error:
@@ -97,3 +100,32 @@ class Vaccine:
 
     def __str__(self):
         return f"(Vaccine Name: {self.vaccine_name}, Available Doses: {self.available_doses})"
+
+    # Find available vaccines
+    @classmethod
+    def search_availability(cls):
+        cm = ConnectionManager()
+        conn = cm.create_connection()
+        cursor = conn.cursor()
+
+        # SQL query to find available vaccines
+        search_vaccine_availability = """
+            SELECT
+                V.Name,
+                V.Doses
+            FROM
+                Vaccines AS V
+            WHERE
+                V.Doses > 0
+            ORDER BY
+                V.Name
+        """
+
+        try:
+            cursor.execute(search_vaccine_availability)
+            return cursor.fetchall()
+        except pymssql.Error:
+            # print("Error occurred when updating caregiver availability")
+            raise
+        finally:
+            cm.close_connection()

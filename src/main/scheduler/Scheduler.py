@@ -1,6 +1,7 @@
 from model.Vaccine import Vaccine
 from model.Caregiver import Caregiver
 from model.Patient import Patient
+from model.Appointments import Appointments
 from util.Util import Util
 from db.ConnectionManager import ConnectionManager
 import pymssql
@@ -18,10 +19,39 @@ current_caregiver = None
 
 
 def create_patient(tokens):
-    """
-    TODO: Part 1
-    """
-    pass
+    # create_patient <username> <password>
+    # check 1: the length for tokens need to be exactly 3 to include all information (with the operation name)
+    if len(tokens) != 3:
+        print("Failed to create user.")
+        print("Invalid input. Please try agian.")
+        return
+
+    username = tokens[1]
+    password = tokens[2]
+
+    # check 2: check if the username has been taken already
+    if username_exists_patient(username):
+        print("Username taken, try again!")
+        return
+
+    salt = Util.generate_salt()
+    hash = Util.generate_hash(password, salt)
+
+    # create the patient
+    patient = Patient(username, salt=salt, hash=hash)
+
+    # save to patient information to our database
+    try:
+        patient.save_to_db()
+    except pymssql.Error as e:
+        print("Failed to create user.")
+        print("Db-Error:", e)
+        # quit()
+    except Exception as e:
+        print("Failed to create user.")
+        print(e)
+        return
+    print("Created user ", username)
 
 
 def create_caregiver(tokens):
@@ -29,6 +59,7 @@ def create_caregiver(tokens):
     # check 1: the length for tokens need to be exactly 3 to include all information (with the operation name)
     if len(tokens) != 3:
         print("Failed to create user.")
+        print("Invalid input. Please try agian.")
         return
 
     username = tokens[1]
@@ -50,7 +81,7 @@ def create_caregiver(tokens):
     except pymssql.Error as e:
         print("Failed to create user.")
         print("Db-Error:", e)
-        quit()
+        # quit()
     except Exception as e:
         print("Failed to create user.")
         print(e)
@@ -72,7 +103,7 @@ def username_exists_caregiver(username):
     except pymssql.Error as e:
         print("Error occurred when checking username")
         print("Db-Error:", e)
-        quit()
+        # quit()
     except Exception as e:
         print("Error occurred when checking username")
         print("Error:", e)
@@ -81,17 +112,74 @@ def username_exists_caregiver(username):
     return False
 
 
+def username_exists_patient(username):
+    cm = ConnectionManager()
+    conn = cm.create_connection()
+
+    select_username = "SELECT * FROM Patients WHERE Username = %s"
+    try:
+        cursor = conn.cursor(as_dict=True)
+        cursor.execute(select_username, username)
+        #  returns false if the cursor is not before the first record or if there are no rows in the ResultSet.
+        for row in cursor:
+            if row['Username'] is not None:
+                print("Username taken, try again!")
+                return True
+    except pymssql.Error as e:
+        print("Failed to create user.")
+        print("Error occurred when checking username")
+        print("Db-Error:", e)
+        # quit()
+    except Exception as e:
+        print("Failed to create user.")
+        print("Error occurred when checking username")
+        print("Error:", e)
+    finally:
+        cm.close_connection()
+    return False
+
+
 def login_patient(tokens):
-    """
-    TODO: Part 1
-    """
-    pass
+    # login_patient <username> <password>
+    # check 1: if someone's already logged-in, they need to log out first
+    global current_caregiver, current_patient
+    if current_patient is not None or current_caregiver is not None:
+        print("User already logged in.")
+        return
+
+    # check 2: the length for tokens need to be exactly 3 to include all information (with the operation name)
+    if len(tokens) != 3:
+        print("Login failed.")
+        print("Invalid input. Please try agian.")
+        return
+
+    username = tokens[1]
+    password = tokens[2]
+
+    patient = None
+    try:
+        patient = Patient(username, password=password).get()
+    except pymssql.Error as e:
+        print("Login failed.")
+        print("Db-Error:", e)
+        # quit()
+    except Exception as e:
+        print("Login failed.")
+        print("Error:", e)
+        return
+
+    # check if the login was successful
+    if patient is None:
+        print("Login failed.")
+    else:
+        print("Logged in as: " + username)
+        current_patient = patient
 
 
 def login_caregiver(tokens):
     # login_caregiver <username> <password>
     # check 1: if someone's already logged-in, they need to log out first
-    global current_caregiver
+    global current_caregiver, current_patient
     if current_caregiver is not None or current_patient is not None:
         print("User already logged in.")
         return
@@ -99,6 +187,7 @@ def login_caregiver(tokens):
     # check 2: the length for tokens need to be exactly 3 to include all information (with the operation name)
     if len(tokens) != 3:
         print("Login failed.")
+        print("Invalid input. Please try agian.")
         return
 
     username = tokens[1]
@@ -110,7 +199,7 @@ def login_caregiver(tokens):
     except pymssql.Error as e:
         print("Login failed.")
         print("Db-Error:", e)
-        quit()
+        # quit()
     except Exception as e:
         print("Login failed.")
         print("Error:", e)
@@ -125,17 +214,110 @@ def login_caregiver(tokens):
 
 
 def search_caregiver_schedule(tokens):
-    """
-    TODO: Part 2
-    """
-    pass
+    # search_caregiver_schedule <date>
+    # Output the username for the caregivers that are available for the date
+    # along with the number of available doses left for each vaccine.
+    # Order by the username of the caregiver. Separate each attribute with a space.
+
+    # check 1: if there is a user logged-in
+    global current_caregiver, current_patient
+    if current_caregiver is None and current_patient is None:
+        print("Please login first!")
+        return
+
+    # check 2: the lengths of tokens (2 for date and the operation name)
+    if len(tokens) != 2:
+        print("Please try agian!")
+        print("Invalid input. Please try agian.")
+        return
+
+    # Extract date from tokens
+    date = tokens[1]
+
+    try:
+        # assume input is hyphenated in the format mm-dd-yyyy
+        d = datetime.datetime.strptime(date, "%m-%d-%Y")
+        available_caregivers = Caregiver.search_availability(d)
+        available_vaccines = Vaccine.search_availability()
+
+        # print available caregivers
+        if len(available_caregivers) == 0:
+            print("No Caregiver is available!")
+        else:
+            print("Available Caregivers:")
+            for caregiver in available_caregivers:
+                print(caregiver[0])
+
+        # print available vaccines
+        print("\nAvailable Vaccine Doses:")
+        for vaccine in available_vaccines:
+            print(f"Vaccine Name: {vaccine[0]}, Available Doses: {vaccine[1]}")
+
+    except pymssql.Error as e:
+        print("Please try again!")
+        print("Search Caregiver Schedule Failed")
+        print("Db-Error:", e)
+        # quit()
+    except ValueError:
+        print("Please try again!")
+        print("Please enter a valid date!")
+        # return
+    except Exception as e:
+        print("Please try again!")
+        print("Error occurred when search caregiver schedule")
+        print("Error:", e)
+        # return
 
 
 def reserve(tokens):
-    """
-    TODO: Part 2
-    """
-    pass
+    # reserve <date> <vaccine>
+
+    #  check 1: check if the current logged-in user is a patient
+    global current_caregiver, current_patient
+    if current_patient is None and current_caregiver is None:
+        print("Please login first!")
+        return
+    if current_patient is None:
+        print("Please login as a patient!")
+        return
+
+    # check 2: the length for tokens need to be exactly 3 to include all information (with the operation name)
+    if len(tokens) != 3:
+        print("Please try again! Invalid input.")
+        return
+
+    date = tokens[1]
+    vaccine_name = tokens[2]
+    vaccine = None
+    try:
+        # check available caregivers and vaccines
+        vaccine = Vaccine(vaccine_name).get()
+        # assume input is hyphenated in the format mm-dd-yyyy
+        d = datetime.datetime.strptime(date, "%m-%d-%Y")
+        available_caregivers = Caregiver.search_availability(d)
+        if vaccine is None or vaccine.get_available_doses() == 0:
+            print("Not enough available doses!")
+        elif len(available_caregivers) == 0:
+            print("No Caregiver is available!")
+        else:
+            chosen_caregiver_username = available_caregivers[0][0]
+            Caregiver.delete_availability(d, chosen_caregiver_username)
+            appointment = Appointments(time=d, status=0,
+                                       pname=current_patient.get_username(), cname=chosen_caregiver_username, vname=vaccine_name)
+            appointment.save_to_db()
+            print(
+                f"Appointment ID: {appointment.get_id()}, Caregiver username: {chosen_caregiver_username}")
+
+    except pymssql.Error as e:
+        print("Please try again!")
+        print("Error occurred when reserving")
+        print("Db-Error:", e)
+        # quit()
+    except Exception as e:
+        print("Please try again!")
+        print("Error occurred when reserving")
+        print("Error:", e)
+        return
 
 
 def upload_availability(tokens):
@@ -148,30 +330,27 @@ def upload_availability(tokens):
 
     # check 2: the length for tokens need to be exactly 2 to include all information (with the operation name)
     if len(tokens) != 2:
-        print("Please try again!")
+        print("Please try again! Invalid input.")
         return
 
     date = tokens[1]
-    # assume input is hyphenated in the format mm-dd-yyyy
-    date_tokens = date.split("-")
-    month = int(date_tokens[0])
-    day = int(date_tokens[1])
-    year = int(date_tokens[2])
+
     try:
-        d = datetime.datetime(year, month, day)
+        # assume input is hyphenated in the format mm-dd-yyyy
+        d = datetime.datetime.strptime(date, "%m-%d-%Y")
         current_caregiver.upload_availability(d)
+        print("Availability uploaded!")
     except pymssql.Error as e:
         print("Upload Availability Failed")
         print("Db-Error:", e)
-        quit()
+        # quit()
     except ValueError:
-        print("Please enter a valid date!")
+        print("Please enter a valid date! Use format mm-dd-yyyy.")
         return
     except Exception as e:
         print("Error occurred when uploading availability")
         print("Error:", e)
         return
-    print("Availability uploaded!")
 
 
 def cancel(tokens):
@@ -191,7 +370,7 @@ def add_doses(tokens):
 
     #  check 2: the length for tokens need to be exactly 3 to include all information (with the operation name)
     if len(tokens) != 3:
-        print("Please try again!")
+        print("Please try again! Invalid Input.")
         return
 
     vaccine_name = tokens[1]
@@ -202,7 +381,7 @@ def add_doses(tokens):
     except pymssql.Error as e:
         print("Error occurred when adding doses")
         print("Db-Error:", e)
-        quit()
+        # quit()
     except Exception as e:
         print("Error occurred when adding doses")
         print("Error:", e)
@@ -217,7 +396,7 @@ def add_doses(tokens):
         except pymssql.Error as e:
             print("Error occurred when adding doses")
             print("Db-Error:", e)
-            quit()
+            # quit()
         except Exception as e:
             print("Error occurred when adding doses")
             print("Error:", e)
@@ -229,7 +408,7 @@ def add_doses(tokens):
         except pymssql.Error as e:
             print("Error occurred when adding doses")
             print("Db-Error:", e)
-            quit()
+            # quit()
         except Exception as e:
             print("Error occurred when adding doses")
             print("Error:", e)
@@ -245,30 +424,63 @@ def show_appointments(tokens):
 
 
 def logout(tokens):
-    """
-    TODO: Part 2
-    """
-    pass
+    # check 1: if there is a user logged-in
+    global current_caregiver, current_patient
+    if current_caregiver is None and current_patient is None:
+        print("Please login first.")
+        return
+    try:
+        current_caregiver = None
+        current_patient = None
+        print("Successfully logged out!")
+    except:
+        print("Please try again!")
+
+
+def display_command_list():
+    print()
+    print(" *** Please enter one of the following commands *** ")
+    print("> create_patient <username> <password>")
+    print("> create_caregiver <username> <password>")
+    print("> login_patient <username> <password>")
+    print("> login_caregiver <username> <password>")
+    print("> search_caregiver_schedule <date>")
+    print("> reserve <date> <vaccine>")
+    print("> upload_availability <date>")
+    print("> cancel <appointment_id>")
+    print("> add_doses <vaccine> <number>")
+    print("> show_appointments")
+    print("> logout")
+    print("> Quit")
+    print()
 
 
 def start():
     stop = False
+    """
     print()
     print(" *** Please enter one of the following commands *** ")
-    print("> create_patient <username> <password>")  # //TODO: implement create_patient (Part 1)
+    # //TODO: implement create_patient (Part 1)
+    print("> create_patient <username> <password>")
     print("> create_caregiver <username> <password>")
-    print("> login_patient <username> <password>")  # // TODO: implement login_patient (Part 1)
+    # // TODO: implement login_patient (Part 1)
+    print("> login_patient <username> <password>")
     print("> login_caregiver <username> <password>")
-    print("> search_caregiver_schedule <date>")  # // TODO: implement search_caregiver_schedule (Part 2)
+    # // TODO: implement search_caregiver_schedule (Part 2)
+    print("> search_caregiver_schedule <date>")
     print("> reserve <date> <vaccine>")  # // TODO: implement reserve (Part 2)
     print("> upload_availability <date>")
-    print("> cancel <appointment_id>")  # // TODO: implement cancel (extra credit)
+    # // TODO: implement cancel (extra credit)
+    print("> cancel <appointment_id>")
     print("> add_doses <vaccine> <number>")
-    print("> show_appointments")  # // TODO: implement show_appointments (Part 2)
+    # // TODO: implement show_appointments (Part 2)
+    print("> show_appointments")
     print("> logout")  # // TODO: implement logout (Part 2)
     print("> Quit")
     print()
+    """
     while not stop:
+        display_command_list()
         response = ""
         print("> ", end='')
 

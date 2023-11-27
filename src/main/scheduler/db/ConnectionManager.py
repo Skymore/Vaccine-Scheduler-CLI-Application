@@ -33,7 +33,7 @@ class ConnectionManager:
 # instantiating a connection manager class and cursor
 cm = ConnectionManager()
 conn = cm.create_connection()
-cursor = conn.cursor()
+cursor = conn.cursor(as_dict=True)
 
 
 # example 1: getting all names and available doses in the vaccine table
