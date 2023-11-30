@@ -286,6 +286,7 @@ def cancel(tokens):
             vaccine_name = current_appointment.get_vname()
             vaccine = Vaccine(vaccine_name).get()
             vaccine.increase_available_doses(1)
+            print(f"Appointment {current_appointment.get_id()} canceled!")
 
     except pymssql.Error as e:
         print("Please try again!")

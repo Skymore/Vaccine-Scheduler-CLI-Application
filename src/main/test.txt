@@ -1,0 +1,38 @@
+create_patient testpa1 pass1
+login_patient testpa1 pass1
+logout
+create_patient testpa1 pass1
+create_patient testpa2 pass2
+create_patient testpa3 pass3
+create_caregiver testca1 pass1
+create_caregiver testca2 pass2
+create_caregiver testca3 pass3
+login_caregiver testca1 pass1
+upload_availability 11-20-2023
+upload_availability 11-21-2023
+upload_availability 11-22-2023
+upload_availability 11-20-2023
+upload_availability 2023-11-20
+add_doses flu 200
+add_doses covid19 200
+logout
+login_caregiver testca2 pass2
+upload_availability 11-20-2023
+upload_availability 11-21-2023
+upload_availability 11-22-2023
+upload_availability 11-20-2023
+logout
+login_patient testpa1 pass1
+search_caregiver_schedule 11-20-2023
+reserve 11-20-2023 flu
+reserve 11-20-2023 covid19
+reserve 11-21-2023 flu
+reserve 11-21-2023 covid19
+reserve 11-23-2023 flu
+show_appointments
+logout
+login_caregiver testca2 pass2
+show_appointments
+search_caregiver_schedule 11-20-2023
+reserve 11-20-2023 flu
+logout
