@@ -67,62 +67,46 @@ class Appointments:
             cm.close_connection()
 
     @classmethod
-    def show_caregiver_appointments(cls, cname):
+    def show_appointments(cls, username, user_table):
         cm = ConnectionManager()
         conn = cm.create_connection()
         cursor = conn.cursor(as_dict=True)
-        query = """
-            SELECT 
-                ID,
-                Vname,
-                Time,
-                Pname
-            FROM
-                Appointments
-            WHERE
-                Cname = %s 
-                AND Status = 0
-            ORDER BY
-                ID
-        """
+        if user_table == 'Caregivers':
+            query = """
+                SELECT 
+                    ID,
+                    Vname,
+                    Time,
+                    Pname AS name
+                FROM
+                    Appointments
+                WHERE
+                    Cname = %s 
+                    AND Status = 0
+                ORDER BY
+                    ID
+            """
+        else:
+            query = """
+                SELECT 
+                    ID,
+                    Vname,
+                    Time,
+                    Cname AS name
+                FROM
+                    Appointments
+                WHERE
+                    Pname = %s 
+                    AND Status = 0
+                ORDER BY
+                    ID
+            """
         try:
-            cursor.execute(query, cname)
-            print(f"Appointments for {cname}:")
+            cursor.execute(query, username)
+            print(f"Appointments for {username}:")
             for row in cursor:
                 print(
-                    f"{str(row['ID'])} {str(row['Vname'])} {str(row['Time'])} {str(row['Pname'])}")
-        except pymssql.Error as e:
-            print("Please try again!")
-            print("Db-Error:", e)
-        except Exception as e:
-            print("Please try again!")
-            print("Error:", e)
-
-    @classmethod
-    def show_patient_appointments(cls, pname):
-        cm = ConnectionManager()
-        conn = cm.create_connection()
-        cursor = conn.cursor(as_dict=True)
-        query = """
-            SELECT 
-                ID,
-                Vname,
-                Time,
-                Cname
-            FROM
-                Appointments
-            WHERE
-                Pname = %s
-                AND Status = 0
-            ORDER BY
-                ID
-        """
-        try:
-            cursor.execute(query, pname)
-            print(f"Appointments for {pname}:")
-            for row in cursor:
-                print(
-                    f"{row['ID']} {row['Vname']} {row['Time']} {row['Cname']}")
+                    f"{row['ID']} {row['Vname']} {row['Time']:%m-%d-%Y} {row['name']}")
         except pymssql.Error as e:
             print("Please try again!")
             print("Db-Error:", e)
@@ -140,7 +124,6 @@ class Appointments:
             cursor.execute(del_appointment, self.ID)
             conn.commit()
         except pymssql.Error:
-            # print("Error occurred when deleting caregiver availability")
             raise
         finally:
             cm.close_connection()

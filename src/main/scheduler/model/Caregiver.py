@@ -1,4 +1,5 @@
 import pymssql
+from model.User import User
 from db.ConnectionManager import ConnectionManager
 from util.Util import Util
 import sys
@@ -6,90 +7,47 @@ sys.path.append("../util/*")
 sys.path.append("../db/*")
 
 
-class Caregiver:
-    def __init__(self, username, password=None, salt=None, hash=None):
-        self.username = username
-        self.password = password
-        self.salt = salt
-        self.hash = hash
-
-    # getters
-    def get(self):
-        cm = ConnectionManager()
-        conn = cm.create_connection()
-        cursor = conn.cursor(as_dict=True)
-
-        get_caregiver_details = "SELECT Salt, Hash FROM Caregivers WHERE Username = %s"
-        try:
-            cursor.execute(get_caregiver_details, self.username)
-            if cursor.rowcount == 0:
-                print("Invalid username")
-                cm.close_connection()
-                return None
-            for row in cursor:
-                curr_salt = row['Salt']
-                curr_hash = row['Hash']
-                calculated_hash = Util.generate_hash(self.password, curr_salt)
-                if not curr_hash == calculated_hash:
-                    print("Incorrect password")
-                    cm.close_connection()
-                    return None
-                else:
-                    self.salt = curr_salt
-                    self.hash = calculated_hash
-                    cm.close_connection()
-                    return self
-        except pymssql.Error as e:
-            raise e
-        finally:
-            cm.close_connection()
-        return None
-
-    def get_username(self):
-        return self.username
-
-    def get_salt(self):
-        return self.salt
-
-    def get_hash(self):
-        return self.hash
-
-    def save_to_db(self):
-        cm = ConnectionManager()
-        conn = cm.create_connection()
-        cursor = conn.cursor()
-
-        add_caregivers = "INSERT INTO Caregivers VALUES (%s, %s, %s)"
-        try:
-            cursor.execute(
-                add_caregivers, (self.username, self.salt, self.hash))
-            # you must call commit() to persist your data if you don't set autocommit to True
-            conn.commit()
-        except pymssql.Error:
-            raise
-        finally:
-            cm.close_connection()
-
+class Caregiver(User):
     # Insert availability with parameter date d and caregiver username cname
     @classmethod
     def upload_availability(cls, d, cname):
         cm = ConnectionManager()
         conn = cm.create_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(as_dict=True)
         # check if this availability already exist
         query = "SELECT Status FROM Availabilities WHERE Time = %s And username = %s"
         try:
             cursor.execute(query, (d, cname))
             if cursor.rowcount != 0:
-                update = "UPDATE Availabilities SET Status = 0 WHERE Time = %s AND username = %s"
-                cursor.execute(update, (d, cname))
-                conn.commit()
+                for row in cursor:
+                    status = row['Status']
+                    if status == 0:
+                        print("Availability upload failed.")
+                        print(f"Availability already exists on {d:%m-%d-%Y}.")
+                    else:
+                        print("Availability upload failed.")
+                        print(f"You have an appointment on {d:%m-%d-%Y}.")
             else:
                 add_availability = "INSERT INTO Availabilities VALUES (%s , %s, 0)"
                 cursor.execute(add_availability, (d, cname))
                 conn.commit()
+                print("Availability uploaded!")
         except pymssql.Error:
             # print("Error occurred when updating caregiver availability")
+            raise
+        finally:
+            cm.close_connection()
+
+    @classmethod
+    def change_availability(cls, d, cname):
+        cm = ConnectionManager()
+        conn = cm.create_connection()
+        cursor = conn.cursor(as_dict=True)
+        try:
+            update = "UPDATE Availabilities SET Status = 0 WHERE Time = %s AND username = %s"
+            cursor.execute(update, (d, cname))
+            conn.commit()
+        except pymssql.Error:
             raise
         finally:
             cm.close_connection()
