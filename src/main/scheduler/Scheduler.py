@@ -63,7 +63,7 @@ def create_user(tokens, user_table):
     # save user information to our database
     try:
         user.save_to_db()
-        print("Created user ", username)
+        print("Created user " + username)
     except pymssql.Error as e:
         print("Failed to create user.")
         print("Db-Error:", e)
